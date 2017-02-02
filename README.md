@@ -1,0 +1,5 @@
+# To compile
+`mpicc -o OUTPUT_FILENAME INPUT_FILENAME`
+
+# To run
+`mpirun -np NUMBER_OF_PROCESSES DESIRED INPUT_FILENAME`
