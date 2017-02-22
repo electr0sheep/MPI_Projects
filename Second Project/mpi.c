@@ -29,6 +29,11 @@ int main(int argc, char * argv[]) {
 
 	// check to make sure the number of processes is a power of 2
 	if (rank == 0){
+		if (size == 1){
+			printf("ERROR: You must have more than one process!\n");
+			MPI_Abort(MPI_COMM_WORLD, 1);
+			return 1;
+		}
 		while(check > 1){
 			if (check % 2 == 0){
 				check /= 2;
