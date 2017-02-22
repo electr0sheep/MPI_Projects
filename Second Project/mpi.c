@@ -52,13 +52,11 @@ int main(int argc, char * argv[]) {
   for (i = 0; i < 500; i++){
     sum ++;
   }
-	if (rank == 0){
-		printf("Beginning barrier...\n");
-	}
 	// sleep(rank) means the tasks will call barrier at different times
 	//  if main process (rank 0) waits for them as expected, it shouldn't
 	//  print "Barrier complete!" until the highest rank process has called it
 	sleep(rank);
+	printf("Process %d calling barrier...\n", rank);
   mybarrier(MPI_COMM_WORLD);
 	if (rank == 0){
 		printf("Barrier complete!\n");
