@@ -2,20 +2,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define N 4
-#define VERBOSE 1
-#define DEBUG 1
+#define N 1200
+#define VERBOSE 0
+#define DEBUG 0
 #define CIRCULAR 0
 #define LINE 1
 
 int min(int, int);
-void sendMatrix(int[]);
+void sendMatrix(int[], int);
 void calculateChunk(int[], int, int, int, int, int);
 int readMatrix(int[], int, int, int);
 void writeMatrix(int[], int, int, int, int);
 void synchronizeMatrix(int[], int[], int, int, int);
 
 int INT_MAX = 999999;
+
+double NUMBER_OF_COMMUNICATIONS = 0.0;
 
 int main(int argc, char * argv []){
 
@@ -220,7 +222,7 @@ int main(int argc, char * argv []){
     }
   }
 
-  sendMatrix(W0);
+  sendMatrix(W0, size);
 
   if (VERBOSE && rank == 0){
     printf("Initial Adjacency Matrix\n");
@@ -246,6 +248,10 @@ int main(int argc, char * argv []){
     }
   }
 
+  if (rank == 0){
+    printf("Total number of communications was: %f\n", NUMBER_OF_COMMUNICATIONS);
+  }
+
   MPI_Finalize();
   return 0;
 }
@@ -258,9 +264,36 @@ int min(int a, int b){
   }
 }
 
-void sendMatrix(int W[N*N]){
+void sendMatrix(int W[N*N], int size){
+  if (size == 1){
+    NUMBER_OF_COMMUNICATIONS++;
+  } else if (size == 4){
+    NUMBER_OF_COMMUNICATIONS += 2;
+  } else if (size == 9){
+    NUMBER_OF_COMMUNICATIONS += 3;
+  } else if (size == 16){
+    NUMBER_OF_COMMUNICATIONS += 4;
+  }
   MPI_Bcast(W, N*N, MPI_INT, 0, MPI_COMM_WORLD);
 }
+
+void synchronizeMatrix(int matrix[], int width, int rank, int size){
+  int i, j, k;
+  int numberOfColumns;
+  int currentColumn = 0;
+  int currentRow = 0;
+
+  int W[N*N];
+
+  if (size == 1){
+    numberOfColumns = 1;
+  } else if (size == 4){
+    numberOfColumns = 2;
+  } else if (size == 9){
+    numberOfColumns = 3;
+  } else if (size == 16){
+    numberOfColumns = 4;
+  }
 
 // The purpose of this function is to update the master matrix as the distance
 //  matrix is calculated, and spread that information to all the processes
@@ -295,6 +328,7 @@ void synchronizeMatrix(int matrix[], int W[], int width, int rank, int size){
         currentColumn = 0;
         currentRow++;
       }
+      NUMBER_OF_COMMUNICATIONS++;
       MPI_Recv(W, width*width, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       // copy the subMatrix data into master matrix
       for (j=0; j<width; j++){
@@ -308,7 +342,7 @@ void synchronizeMatrix(int matrix[], int W[], int width, int rank, int size){
   }
 
   // broadcast the new master matrix
-  sendMatrix(matrix);
+  sendMatrix(matrix, size);
 }
 
 int readMatrix(int matrix[], int x, int y, int width){
@@ -334,3 +368,45 @@ void calculateChunk(int matrix[], int x, int y, int width, int rank, int size){
     synchronizeMatrix(matrix, W, width, rank, size);
   }
 }
+
+// NOTE: I wasn't able to completely finish this, however I believe I could
+// have accomplished the communication restriction using the following idea.
+// First, send every other column to the left, and then every other row to the top
+// Repeat this until the root process has received all data
+// Here is a visual representation
+//
+// Proccess layout of matrix (each square represents a chunk of the overall
+// matrix that each process is responsible for)
+// |0 |1 |2 |3 |4 |5 |6 |7 |
+// |8 |9 |10|11|12|13|14|15|
+// |16|17|18|19|20|21|22|23|
+// |24|25|26|27|28|29|30|31|
+// |32|33|34|35|36|37|38|39|
+// |40|41|42|43|44|45|46|47|
+// |48|49|50|51|52|53|54|55|
+// |56|57|58|59|60|61|62|63|
+//
+// STEP 1
+// |0 |2 |4 |6 |       |0 |2 |4 |6 |
+// |8 |10|12|14|       |16|18|20|22|
+// |16|18|20|22|       |32|34|36|38|
+// |24|26|28|30|       |48|50|52|54|
+// |32|34|36|38|
+// |40|42|44|46|
+// |48|50|52|54|
+// |56|58|60|62|
+//
+// STEP 2
+// |0 |4 |             |0 |4 |
+// |16|20|             |32|36|
+// |32|36|
+// |48|52|
+//
+// STEP 3
+// |0 |                |0 |
+// |32|
+//
+// Using this idea, the total number of communications should have been
+// log(p)+2Nlog(p)
+//
+// Currently, my program uses log(p)+Nlog(p)+(p*N-1) as the total number of communications
