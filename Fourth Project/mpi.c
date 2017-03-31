@@ -277,24 +277,6 @@ void sendMatrix(int W[N*N], int size){
   MPI_Bcast(W, N*N, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
-void synchronizeMatrix(int matrix[], int width, int rank, int size){
-  int i, j, k;
-  int numberOfColumns;
-  int currentColumn = 0;
-  int currentRow = 0;
-
-  int W[N*N];
-
-  if (size == 1){
-    numberOfColumns = 1;
-  } else if (size == 4){
-    numberOfColumns = 2;
-  } else if (size == 9){
-    numberOfColumns = 3;
-  } else if (size == 16){
-    numberOfColumns = 4;
-  }
-
 // The purpose of this function is to update the master matrix as the distance
 //  matrix is calculated, and spread that information to all the processes
 void synchronizeMatrix(int matrix[], int W[], int width, int rank, int size){
