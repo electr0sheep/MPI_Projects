@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define N 1200
 #define VERBOSE 0
@@ -9,15 +10,14 @@
 #define LINE 1
 
 int min(int, int);
-void sendMatrix(int[], int);
+void sendMatrix(int[]);
 void calculateChunk(int[], int, int, int, int, int);
 int readMatrix(int[], int, int, int);
 void writeMatrix(int[], int, int, int, int);
 void synchronizeMatrix(int[], int[], int, int, int);
+void updateMasterMatrix(int[], int, int, int, int);
 
 int INT_MAX = 999999;
-
-double NUMBER_OF_COMMUNICATIONS = 0.0;
 
 int main(int argc, char * argv []){
 
@@ -222,7 +222,7 @@ int main(int argc, char * argv []){
     }
   }
 
-  sendMatrix(W0, size);
+  sendMatrix(W0);
 
   if (VERBOSE && rank == 0){
     printf("Initial Adjacency Matrix\n");
@@ -248,10 +248,6 @@ int main(int argc, char * argv []){
     }
   }
 
-  if (rank == 0){
-    printf("Total number of communications was: %f\n", NUMBER_OF_COMMUNICATIONS);
-  }
-
   MPI_Finalize();
   return 0;
 }
@@ -264,16 +260,7 @@ int min(int a, int b){
   }
 }
 
-void sendMatrix(int W[N*N], int size){
-  if (size == 1){
-    NUMBER_OF_COMMUNICATIONS++;
-  } else if (size == 4){
-    NUMBER_OF_COMMUNICATIONS += 2;
-  } else if (size == 9){
-    NUMBER_OF_COMMUNICATIONS += 3;
-  } else if (size == 16){
-    NUMBER_OF_COMMUNICATIONS += 4;
-  }
+void sendMatrix(int W[N*N]){
   MPI_Bcast(W, N*N, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
@@ -310,7 +297,6 @@ void synchronizeMatrix(int matrix[], int W[], int width, int rank, int size){
         currentColumn = 0;
         currentRow++;
       }
-      NUMBER_OF_COMMUNICATIONS++;
       MPI_Recv(W, width*width, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       // copy the subMatrix data into master matrix
       for (j=0; j<width; j++){
@@ -324,7 +310,7 @@ void synchronizeMatrix(int matrix[], int W[], int width, int rank, int size){
   }
 
   // broadcast the new master matrix
-  sendMatrix(matrix, size);
+  sendMatrix(matrix);
 }
 
 int readMatrix(int matrix[], int x, int y, int width){
@@ -349,6 +335,55 @@ void calculateChunk(int matrix[], int x, int y, int width, int rank, int size){
     }
     synchronizeMatrix(matrix, W, width, rank, size);
   }
+}
+
+void updateMasterMatrix(int masterMatrix[], int x, int y, int rank, int size){
+  // x and y are the x and y coordinates of the start
+  // of the process' submatrix
+  int i, j, k;
+  int currentSkip = 2;
+  int width = N/size;
+  int rankWidth = sqrt(size);
+  int totalReceiveWidth = width*2;
+  int secondaryMatrix[N*N];
+  int rightRank = (rank+currentSkip)/2;
+  int bottomRank = rank+rankWidth;
+  int recvX, recvY;
+
+  do{
+    // first, all processes receive data from the process on the right
+    for (i=0; i<rank; i++){
+      if (rank%currentSkip == 0){
+        recvX = x+width;
+        recvY = y;
+        MPI_Recv(secondaryMatrix, N*N, MPI_INT, rank+(currentSkip/2), i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (j=recvY; j<width; j++){
+          for (k=recvX; k<width; k++){
+            writeMatrix(masterMatrix, k, j, N, readMatrix(secondaryMatrix, k, j, N));
+          }
+        }
+      } else {
+        MPI_Send(masterMatrix, N*N, MPI_INT, rank-(currentSkip/2), i, MPI_COMM_WORLD);
+      }
+    }
+    // then, receive data from the process below
+    for (i=0; i<rank; i++){
+      recvX = x;
+      recvY = y+width;
+      if (rank%(currentSkip*rankWidth) == 0){
+        MPI_Recv(secondaryMatrix, N*N, MPI_INT, rank+((currentSkip/2)*width), i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (j=recvY; j<width*2; j++){
+          for (k=recvX; k<width; k++){
+            writeMatrix(masterMatrix, k, j, N, readMatrix(secondaryMatrix, k, j, N));
+          }
+        }
+      } else {
+        MPI_Send(masterMatrix, N*N, MPI_INT, rank-((currentSkip/2)*width), i, MPI_COMM_WORLD);
+      }
+    }
+    currentSkip *=2;
+    width *= 2;
+  } while(width<=N);
 }
 
 // NOTE: I wasn't able to completely finish this, however I believe I could
@@ -392,3 +427,5 @@ void calculateChunk(int matrix[], int x, int y, int width, int rank, int size){
 // log(p)+2Nlog(p)
 //
 // Currently, my program uses log(p)+Nlog(p)+(p*N-1) as the total number of communications
+//
+// UPDATE: I believe I was close with updateMasterMatrix, but I ran out of time
