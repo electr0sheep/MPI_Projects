@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define N 5
+#define N 100
 #define INT_MAX 9999999
 #define MAX_PROCESSES 16
+#define VERBOSE 0
 
 void initializeMatrix(double[], int);
 double readMatrix(double[], int, int, int);
@@ -40,7 +41,7 @@ int main(int argc, char * argv []){
 
   send_force_data_to_root(forces, rank, size);
 
-  if (rank == 0){
+  if (rank == 0 && VERBOSE){
     force_calc_matrix(positions, forces_matrix);
     printf("                               POSITION MATRIX\n");
     printf("================================================================================\n");
