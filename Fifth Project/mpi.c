@@ -176,7 +176,7 @@ void send_force_data_to_root(double F[], int rank, int size){
   int step = 1;
   int recv;
 
-  while (step <= size/2){
+  for (step=1; step <= size/2; step*=2){
     recv=step*2;
     if (rank%step == 0){
       if (rank%recv == 0){
@@ -188,6 +188,5 @@ void send_force_data_to_root(double F[], int rank, int size){
         MPI_Send(F, N, MPI_DOUBLE, rank-step, 0, MPI_COMM_WORLD);
       }
     }
-    step*=2;
   }
 }
