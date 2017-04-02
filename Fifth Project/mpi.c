@@ -171,18 +171,23 @@ void force_calc(double x[], double F[], int assignments[], int rank){
 }
 
 void send_force_data_to_root(double F[], int rank, int size){
-  int i, j;
+  int i;
   double tmp[N];
+  int step = 1;
+  int recv;
 
-  if (rank == 0){
-    for (i=1; i<size; i++){
-      MPI_Recv(tmp, N, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      for (j=0; j<N; j++){
-        F[j] += tmp[j];
+  while (step <= size/2){
+    recv=step*2;
+    if (rank%step == 0){
+      if (rank%recv == 0){
+        MPI_Recv(tmp, N, MPI_DOUBLE, rank+step, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (i=0; i<N; i++){
+          F[i] += tmp[i];
+        }
+      } else {
+        MPI_Send(F, N, MPI_DOUBLE, rank-step, 0, MPI_COMM_WORLD);
       }
-      printf("\n");
     }
-  } else {
-    MPI_Send(F, N, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    step*=2;
   }
 }
