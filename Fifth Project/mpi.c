@@ -20,9 +20,9 @@ int main(int argc, char * argv []){
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  if (size != 1 && size != 4 && size != 16 && size != 32){
+  if (size != 1 && size != 2 && size != 4  && size != 8 && size != 16 && size != 32){
     if (rank == 0){
-      printf("ERROR: Must use 1, 4, 16, or 32 processes!\n");
+      printf("ERROR: Must use 1, 2, 4, 8, 16, or 32 processes!\n");
     }
     MPI_Finalize();
     return 0;
