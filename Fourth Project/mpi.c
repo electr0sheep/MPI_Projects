@@ -26,6 +26,8 @@ int main(int argc, char * argv []){
 
   int xChunk, yChunk, chunkWidth;
 
+  double start, end;
+
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -235,7 +237,15 @@ int main(int argc, char * argv []){
     }
   }
 
+  // get the start time
+  MPI_Barrier(MPI_COMM_WORLD);
+  start = MPI_Wtime();
+
   calculateChunk(W0, xChunk, yChunk, chunkWidth, rank, size);
+
+  // get the finish time
+  MPI_Barrier(MPI_COMM_WORLD);
+  end = MPI_Wtime();
 
   if (VERBOSE && rank == 0){
     printf("Resulting Distance Matrix\n");
@@ -246,6 +256,10 @@ int main(int argc, char * argv []){
       }
       printf("\n");
     }
+  }
+
+  if (rank == 0){
+    printf("Runtime = %f\n", end-start);
   }
 
   MPI_Finalize();

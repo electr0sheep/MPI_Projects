@@ -1,0 +1,11 @@
+for k starting from 1 to N
+  for i starting from 1 to N
+    h[i]=W[k,i]
+    v[i]=W[i,k]
+  end for loop
+  for i starting from 1 to N
+    for j starting from 1 to N
+      W[i,j]=min{W[i,j],v[i]+h[j]}
+    end j loop
+  end i loop
+end k loop
