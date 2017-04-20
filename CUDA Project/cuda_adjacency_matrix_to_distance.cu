@@ -11,27 +11,41 @@ void initializeLinearGraph(int*);
 void writeMatrix(int*, int, int, int, int);
 void printMatrix(int*);
 
+__global__ void calculateDistance(int *matrix){
+
+}
+
 int main(){
   int *matrix;
+  int *d_matrix;
   int size = N * N * sizeof(int);
 
-  matrix = (int *)malloc(size);
+  // Allocate space for device copy of matrix
+  cudaMalloc((void **)&d_matrix, size);
 
-  initializeCircularGraph(matrix);
+  // Allocate space for host copy of matrix and initialize
+  matrix = (int *)malloc(size); initializeCircularGraph(matrix);
+
+  // Copy matrix to device
+  cudaMemcpy(d_matrix, matrix, size, cudaMemcpyHostToDevice);
 
   // do cuda stuff
+  calculateDistance<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix);
 
   cout << "                          ADJACENCY MATRIX" << endl;
   cout << "==============================================================================" << endl;
   printMatrix(matrix);
 
-  // copy cuda stuff to host
+  // Copy results back to host
+  cudaMemcpy(matrix, d_matrix, size, cudaMemcpyDeviceToHost);
 
   cout << "                            DISTANCE MATRIX" << endl;
   cout << "==============================================================================" << endl;
   printMatrix(matrix);
 
+  // Cleanup
   free(matrix);
+  cudaFree(d_matrix);
 
   return 0;
 }
