@@ -3,3 +3,6 @@ Second Project/mpi
 Third Project/mpi
 Fourth Project/mpi
 Fifth Project/mpi
+*.exe
+*.exp
+*.lib
