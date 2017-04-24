@@ -3,7 +3,7 @@
 
 using namespace std;
 
-#define N 64
+#define N 256
 #define BLOCK_SIZE 8
 #define THREAD_COUNT 32
 
@@ -11,7 +11,6 @@ void initializeCircularGraph(int*);
 void initializeLinearGraph(int*);
 void printMatrix(int*, ofstream&);
 __host__ __device__ void writeMatrix(int*, int, int, int);
-// __device__ int min(int, int);
 __device__ int readMatrix(int*, int, int);
 __global__ void calculateDistanceMatrix(int*);
 
@@ -104,17 +103,10 @@ void printMatrix(int *matrix, ofstream &myFile){
   myFile << endl;
 }
 
+// MAKE THESE MACROS
 __host__ __device__ void writeMatrix(int *matrix, int x, int y, int value){
   matrix[x+(y*N)] = value;
 }
-
-// __device__ int min(int a, int b){
-//   if (a < b){
-//     return a;
-//   } else {
-//     return b;
-//   }
-// }
 
 __device__ int readMatrix(int *matrix, int x, int y){
   return matrix[x+(y*N)];
@@ -131,9 +123,9 @@ __global__ void calculateDistanceMatrix(int *matrix){
 
   for (k=0; k<N; k++){
     for (j=0; j<N; j++){
-      if (j%blockIdx.x == 0){
+      if ((j%BLOCK_SIZE) == blockIdx.x){
         for (i=0; i<N; i++){
-          if (i%threadIdx.x == 0){
+          if ((i%THREAD_COUNT) == threadIdx.x){
             int minimum = min(readMatrix(matrix, i, j), readMatrix(matrix, i, k) + readMatrix(matrix, k, j));
             // EXPERIMENTAL
             writeMatrix(matrix, i, j, minimum);
