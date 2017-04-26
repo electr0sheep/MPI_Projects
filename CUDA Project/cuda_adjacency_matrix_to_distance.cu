@@ -3,24 +3,36 @@
 
 using namespace std;
 
-#define N 256
+#define N 128
 #define BLOCK_SIZE 8
 #define THREAD_COUNT 32
+#define FILE_NAME "output.txt"
 
 void initializeCircularGraph(int*);
 void initializeLinearGraph(int*);
 void printMatrix(int*, ofstream&);
+bool checkCircularResults(int*);
+bool checkLinearResults(int*);
 __host__ __device__ void writeMatrix(int*, int, int, int);
-__device__ int readMatrix(int*, int, int);
-__global__ void calculateDistanceMatrix(int*);
+__host__ __device__ int readMatrix(int*, int, int);
+__global__ void calculateDistanceMatrix(int*, int);
 
 int main(){
+  // first, make sure N is even
+  if (N%2 != 0){
+    cout << "ERROR: N must be even. Change N and recompile!" << endl;
+    return 1;
+  } else if (N > 128){
+    cout << "ERROR: The max size of N is 128. Change N and recompile!" << endl;
+    return 1;
+  }
   int *matrix;
   int *d_matrix;
+  int k;
   int size = N * N * sizeof(int);
   ofstream myFile;
 
-  myFile.open("output.txt");
+  myFile.open(FILE_NAME);
 
   // Allocate space for device copy of matrix
   cudaMalloc((void **)&d_matrix, size);
@@ -32,7 +44,12 @@ int main(){
   cudaMemcpy(d_matrix, matrix, size, cudaMemcpyHostToDevice);
 
   // do cuda stuff
-  calculateDistanceMatrix<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix);
+  // NOTE: CUDA does not have any way to synchronize blocks. Because we need
+  // all blocks to by synced after each K step, the way to accomplish this is
+  // to end the kernel whenever block synchronization is required.
+  for (k=0; k<N; k++){
+    calculateDistanceMatrix<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix, k);
+  }
 
   myFile << "                          ADJACENCY MATRIX" << endl;
   myFile << "==============================================================================" << endl;
@@ -44,6 +61,8 @@ int main(){
   myFile << "                            DISTANCE MATRIX" << endl;
   myFile << "==============================================================================" << endl;
   printMatrix(matrix, myFile);
+
+  myFile << "RESULT OF MATRIX CHECK: " << checkCircularResults(matrix) << endl;
 
   // Cleanup
   free(matrix);
@@ -103,6 +122,43 @@ void printMatrix(int *matrix, ofstream &myFile){
   myFile << endl;
 }
 
+bool checkCircularResults(int *matrix){
+  int x, y, number;
+  // bool even;
+  bool increment = true;
+
+  number = 0;
+
+  // even = (N % 2) == 0;
+
+  for (y=0; y<N; y++){
+    for (x=0; x<N; x++){
+      if (number != readMatrix(matrix, x, y)){
+        cout << "X: " << x << " Y: " << y << endl;
+        cout << "number: " << number << " matrix: " << readMatrix(matrix, x, y) << endl;
+        cout << "increment: " << increment << endl;
+        return false;
+      }
+      if (number == N/2){
+        increment = false;
+      } else if (number == 0){
+        increment = true;
+      }
+      if (increment == true){
+        number ++;
+      } else {
+        number --;
+      }
+    }
+    if (y < N/2){
+      number++;
+    } else {
+      number--;
+    }
+  }
+  return true;
+}
+
 // MAKE THESE MACROS
 __host__ __device__ void writeMatrix(int *matrix, int x, int y, int value){
   matrix[x+(y*N)] = value;
@@ -112,29 +168,26 @@ __device__ int readMatrix(int *matrix, int x, int y){
   return matrix[x+(y*N)];
 }
 
-__global__ void calculateDistanceMatrix(int *matrix){
+__global__ void calculateDistanceMatrix(int *matrix, int k){
   // __shared__ int matrixCopy[N*N];
 
-  int i, j, k;
+  int i, j;
 
   // for (i=0; i<N*N; i++){
   //   matrixCopy[i] = matrix[i];
   // }
 
-  for (k=0; k<N; k++){
-    for (j=0; j<N; j++){
-      if ((j%BLOCK_SIZE) == blockIdx.x){
-        for (i=0; i<N; i++){
-          if ((i%THREAD_COUNT) == threadIdx.x){
-            int minimum = min(readMatrix(matrix, i, j), readMatrix(matrix, i, k) + readMatrix(matrix, k, j));
-            // EXPERIMENTAL
-            writeMatrix(matrix, i, j, minimum);
-            //writeMatrix(matrixCopy, i, j, minimum);
-          }
+  for (j=0; j<N; j++){
+    if ((j%BLOCK_SIZE) == blockIdx.x){
+      for (i=0; i<N; i++){
+        if ((i%THREAD_COUNT) == threadIdx.x){
+          int minimum = min(readMatrix(matrix, i, j), readMatrix(matrix, i, k) + readMatrix(matrix, k, j));
+          // EXPERIMENTAL
+          writeMatrix(matrix, i, j, minimum);
+          //writeMatrix(matrixCopy, i, j, minimum);
         }
       }
     }
-    // copy local matrix to device matrix
   }
 
 
