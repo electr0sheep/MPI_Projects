@@ -8,12 +8,18 @@ using namespace std;
 #define THREAD_COUNT 32
 #define FILE_NAME "output.txt"
 
+#define WRITE_MATRIX(M, X, Y, V) \
+  M[X+(Y*N)] = V;
+
+#define READ_MATRIX(M, X, Y, R) \
+  R = M[X+(Y*N)];
+
 void initializeCircularGraph(int*);
 void initializeLinearGraph(int*);
 void printMatrix(int*, ofstream&);
 bool checkCircularResults(int*);
 bool checkLinearResults(int*);
-__host__ __device__ void writeMatrix(int*, int, int, int);
+//__host__ __device__ void writeMatrix(int*, int, int, int);
 __host__ __device__ int readMatrix(int*, int, int);
 __global__ void calculateDistanceMatrix(int*, int);
 
@@ -78,17 +84,21 @@ void initializeCircularGraph(int *ar){
   for (j=0; j<N; j++){
     for (i=0; i<N; i++){
       if (j == i+1 || i == j+1){
-        writeMatrix(ar, i, j, 1);
+        WRITE_MATRIX(ar, i, j, 1);
+        // writeMatrix(ar, i, j, 1);
       } else if ((j == N-1 && i == 0) || (j == 0 && i == N-1)){
-        writeMatrix(ar, i, j, 1);
+        WRITE_MATRIX(ar, i, j, 1);
+        // writeMatrix(ar, i, j, 1);
       } else{
-        writeMatrix(ar, i, j, 999999);
+        WRITE_MATRIX(ar, i, j, 999999);
+        // writeMatrix(ar, i, j, 999999);
       }
     }
   }
 
   for (i=0; i<N; i++){
-    writeMatrix(ar, i, i, 0);
+    WRITE_MATRIX(ar, i, i, 0);
+    // writeMatrix(ar, i, i, 0);
   }
 }
 
@@ -98,15 +108,18 @@ void initializeLinearGraph(int *ar){
   for (j=0; j<N; j++){
     for (i=0; i<N; i++){
       if (j == i+1 || i == j+1){
-        writeMatrix(ar, i, j, 1);
+        WRITE_MATRIX(ar, i, j, 1);
+        // writeMatrix(ar, i, j, 1);
       } else {
-        writeMatrix(ar, i, j, 999999);
+        WRITE_MATRIX(ar, i, j, 999999);
+        // writeMatrix(ar, i, j, 999999);
       }
     }
   }
 
   for (i=0; i<N; i++){
-    writeMatrix(ar, i, i, 0);
+    WRITE_MATRIX(ar, i, i, 0);
+    // writeMatrix(ar, i, i, 0);
   }
 }
 
@@ -123,7 +136,7 @@ void printMatrix(int *matrix, ofstream &myFile){
 }
 
 bool checkCircularResults(int *matrix){
-  int x, y, number;
+  int x, y, number, n;
   // bool even;
   bool increment = true;
 
@@ -133,9 +146,12 @@ bool checkCircularResults(int *matrix){
 
   for (y=0; y<N; y++){
     for (x=0; x<N; x++){
-      if (number != readMatrix(matrix, x, y)){
+      READ_MATRIX(matrix, x, y, n);
+      // if (number != readMatrix(matrix, x, y)){
+      if (number != n){
         cout << "X: " << x << " Y: " << y << endl;
-        cout << "number: " << number << " matrix: " << readMatrix(matrix, x, y) << endl;
+        // cout << "number: " << number << " matrix: " << readMatrix(matrix, x, y) << endl;
+        cout << "number: " << number << " matrix: " << n << endl;
         cout << "increment: " << increment << endl;
         return false;
       }
@@ -171,7 +187,7 @@ __device__ int readMatrix(int *matrix, int x, int y){
 __global__ void calculateDistanceMatrix(int *matrix, int k){
   // __shared__ int matrixCopy[N*N];
 
-  int i, j;
+  int i, j, num1, num2, num3;
 
   // for (i=0; i<N*N; i++){
   //   matrixCopy[i] = matrix[i];
@@ -181,9 +197,14 @@ __global__ void calculateDistanceMatrix(int *matrix, int k){
     if ((j%BLOCK_SIZE) == blockIdx.x){
       for (i=0; i<N; i++){
         if ((i%THREAD_COUNT) == threadIdx.x){
-          int minimum = min(readMatrix(matrix, i, j), readMatrix(matrix, i, k) + readMatrix(matrix, k, j));
+          READ_MATRIX(matrix, i, j, num1);
+          READ_MATRIX(matrix, i, k, num2);
+          READ_MATRIX(matrix, k, j, num3);
+          // int minimum = min(readMatrix(matrix, i, j), readMatrix(matrix, i, k) + readMatrix(matrix, k, j));
+          int minimum = min(num1, num2 + num3);
           // EXPERIMENTAL
-          writeMatrix(matrix, i, j, minimum);
+          WRITE_MATRIX(matrix, i, j, minimum);
+          // writeMatrix(matrix, i, j, minimum);
           //writeMatrix(matrixCopy, i, j, minimum);
         }
       }
