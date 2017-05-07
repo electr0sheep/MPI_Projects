@@ -14,15 +14,15 @@ using namespace std;
 #define READ_MATRIX(M, X, Y, R) \
   R = M[X+(Y*N)];
 
-void initializeCircularGraph(int*);
-void initializeLinearGraph(int*);
 void printMatrix(int*, ofstream&);
 bool checkCircularResults(int*);
 bool checkLinearResults(int*);
 __global__ void calculateDistanceMatrix(int*, int);
+__global__ void initializeCircularGraph(int*);
+__global__ void initializeLinearGraph(int*);
 
 int main(){
-  // first, make sure N is even
+  // first, make sure N is even and in range
   if (N%2 != 0){
     cout << "ERROR: N must be even. Change N and recompile!" << endl;
     return 1;
@@ -30,6 +30,8 @@ int main(){
     cout << "ERROR: The max size of N is 128. Change N and recompile!" << endl;
     return 1;
   }
+
+  // variables
   int *matrix;
   int *d_matrix;
   int k;
@@ -41,11 +43,15 @@ int main(){
   // Allocate space for device copy of matrix
   cudaMalloc((void **)&d_matrix, size);
 
-  // Allocate space for host copy of matrix and initialize
-  matrix = (int *)malloc(size); initializeCircularGraph(matrix);
+  // Allocate space for host copy of matrix
+  matrix = (int *)malloc(size);
 
-  // Copy matrix to device
+  // Copy matrix to device and initialize
   cudaMemcpy(d_matrix, matrix, size, cudaMemcpyHostToDevice);
+  initializeCircularGraph<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix);
+
+  // Copy initialized matrix to host
+  cudaMemcpy(matrix, d_matrix, size, cudaMemcpyDeviceToHost);
 
   // do cuda stuff
   // NOTE: CUDA does not have any way to synchronize blocks. Because we need
@@ -76,44 +82,6 @@ int main(){
   return 0;
 }
 
-void initializeCircularGraph(int *ar){
-  int i, j;
-
-  for (j=0; j<N; j++){
-    for (i=0; i<N; i++){
-      if (j == i+1 || i == j+1){
-        WRITE_MATRIX(ar, i, j, 1);
-      } else if ((j == N-1 && i == 0) || (j == 0 && i == N-1)){
-        WRITE_MATRIX(ar, i, j, 1);
-      } else{
-        WRITE_MATRIX(ar, i, j, 999999);
-      }
-    }
-  }
-
-  for (i=0; i<N; i++){
-    WRITE_MATRIX(ar, i, i, 0);
-  }
-}
-
-void initializeLinearGraph(int *ar){
-  int i, j;
-
-  for (j=0; j<N; j++){
-    for (i=0; i<N; i++){
-      if (j == i+1 || i == j+1){
-        WRITE_MATRIX(ar, i, j, 1);
-      } else {
-        WRITE_MATRIX(ar, i, j, 999999);
-      }
-    }
-  }
-
-  for (i=0; i<N; i++){
-    WRITE_MATRIX(ar, i, i, 0);
-  }
-}
-
 void printMatrix(int *matrix, ofstream &myFile){
   int i;
 
@@ -136,9 +104,10 @@ bool checkCircularResults(int *matrix){
     for (x=0; x<N; x++){
       READ_MATRIX(matrix, x, y, n);
       if (number != n){
+        cout << "Matrix check failed!" << endl;
+        cout << "These matrix coordinates failed:" << endl;
         cout << "X: " << x << " Y: " << y << endl;
-        cout << "number: " << number << " matrix: " << n << endl;
-        cout << "increment: " << increment << endl;
+        cout << "Found " << n << " where " << number << " was expected" << endl;
         return false;
       }
       if (number == N/2){
@@ -158,17 +127,12 @@ bool checkCircularResults(int *matrix){
       number--;
     }
   }
+  cout << "Matrix check passed!" << endl;
   return true;
 }
 
 __global__ void calculateDistanceMatrix(int *matrix, int k){
-  // __shared__ int matrixCopy[N*N];
-
   int i, j, num1, num2, num3;
-
-  // for (i=0; i<N*N; i++){
-  //   matrixCopy[i] = matrix[i];
-  // }
 
   for (j=0; j<N; j++){
     if ((j%BLOCK_SIZE) == blockIdx.x){
@@ -178,9 +142,7 @@ __global__ void calculateDistanceMatrix(int *matrix, int k){
           READ_MATRIX(matrix, i, k, num2);
           READ_MATRIX(matrix, k, j, num3);
           int minimum = min(num1, num2 + num3);
-          // EXPERIMENTAL
           WRITE_MATRIX(matrix, i, j, minimum);
-          //writeMatrix(matrixCopy, i, j, minimum);
         }
       }
     }
@@ -210,4 +172,53 @@ __global__ void calculateDistanceMatrix(int *matrix, int k){
   // This process will go from k = 0 to k = N-1 steps, and once all these
   // k steps are done, the function will be complete
 
+}
+
+__global__ void initializeCircularGraph(int *matrix){
+  int i, j;
+
+  for (j=0; j<N; j++){
+    if ((j%BLOCK_SIZE) == blockIdx.x){
+      for (i=0; i<N; i++){
+        if ((i%THREAD_COUNT) == threadIdx.x){
+          // diagonal is zero
+          if (i == j){
+            WRITE_MATRIX(matrix, i, j, 0);
+          // makes graph linear
+          } else if (i == j+1 || j == i+1){
+            WRITE_MATRIX(matrix, i, j, 1);
+          // makes graph circular
+          } else if((i == 0 && j == N-1) || (j == 0 && i == N - 1)){
+            WRITE_MATRIX(matrix, i, j, 1);
+          // every other node isn't connected
+          } else {
+            WRITE_MATRIX(matrix, i, j, 999999)
+          }
+        }
+      }
+    }
+  }
+}
+
+__global__ void initializeLinearGraph(int *matrix){
+  int i, j;
+
+  for (j=0; j<N; j++){
+    if ((j%BLOCK_SIZE) == blockIdx.x){
+      for (i=0; i<N; i++){
+        if ((i%THREAD_COUNT) == threadIdx.x){
+          // diagonal is zero
+          if (i == j){
+            WRITE_MATRIX(matrix, i, j, 0);
+          // makes graph linear
+          } else if (i == j+1 || j == i+1){
+            WRITE_MATRIX(matrix, i, j, 1);
+          // every other node isn't connected
+          } else {
+            WRITE_MATRIX(matrix, i, j, 999999)
+          }
+        }
+      }
+    }
+  }
 }
