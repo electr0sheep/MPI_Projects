@@ -1,3 +1,7 @@
+/****************************************************************************************************/
+/* https://vtechworks.lib.vt.edu/bitstream/handle/10919/19873/TR_GPU_synchronization.pdf?sequence=3 */
+/****************************************************************************************************/
+
 #include <iostream>
 #include <fstream>
 
@@ -20,6 +24,8 @@ bool checkLinearResults(int*);
 __global__ void calculateDistanceMatrix(int*, int);
 __global__ void initializeCircularGraph(int*);
 __global__ void initializeLinearGraph(int*);
+// GPU lock-free synchronization function
+__device__ void __gpu_sync(int, int*, int*);
 
 int main(){
   // first, make sure N is even and in range
@@ -218,4 +224,34 @@ __global__ void initializeLinearGraph(int *matrix){
       }
     }
   }
+}
+
+__device__ void __gpu_sync(int goalVal, int *Arrayin, int *Arrayout){
+  // thread ID in a block
+  int tid_in_block = threadIdx.x * blockDim.y + threadIdx.y;
+  int nBlockNum = gridDim.x * gridDim.y;
+  int bid = blockIdx.x * gridDim.y + blockIdx.y;
+
+  // only thread 0 is used for synchronization
+  if (tid_in_block == 0){
+    Arrayin[bid] = goalVal;
+  }
+
+  if (bid == 1){
+    if (tid_in_block < nBlockNum){
+      while (Arrayin[tid_in_block] != goalVal){
+        // ...
+      }
+    }
+    __syncthreads();
+    if (tid_in_block < nBlockNum){
+      Arrayout[tid_in_block] = goalVal;
+    }
+  }
+  if (tid_in_block == 0){
+    while (Arrayout[bid] != goalVal){
+      // ...
+    }
+  }
+  __syncthreads();
 }
