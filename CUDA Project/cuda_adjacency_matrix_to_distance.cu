@@ -164,13 +164,10 @@ __global__ void calculateDistanceMatrix(int *matrix, int k){
 
   // As each row is completed, the matrix for that row will be updated, and
   // the block will move on to the next one. Once all blocks are finished,
-  // that signals the completion of the kth step, and the blocks will update
-  // the rows of the matrix in device memory that they were responsible for
-  // and then synchronize blocks
-  // By doing this, no race conditions should exist
+  // that signals the completion of the kth step, and the kernel will terminate
 
-  // This process will go from k = 0 to k = N-1 steps, and once all these
-  // k steps are done, the function will be complete
+  // By terminating the kernel after every kth step, this ensures that all
+  // blocks remain synchronized
 
 }
 
