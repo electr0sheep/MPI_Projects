@@ -1,6 +1,13 @@
-/****************************************************************************************************/
-/* https://vtechworks.lib.vt.edu/bitstream/handle/10919/19873/TR_GPU_synchronization.pdf?sequence=3 */
-/****************************************************************************************************/
+/*****************************************************************************************/
+/* https://vtechworks.lib.vt.edu/bitstream/handle/10919/19873/TR_GPU_synchronization.pdf */
+/*****************************************************************************************/
+
+/***************************************************************************/
+/* THIS PROGRAM IMPLEMENTS THE SIMPLE GPU SYNC FUNCTION IN THE ABOVE PAPER */
+/***************************************************************************/
+
+// 7314 clock cycles for cpu bound sync (10 runs)
+// 7193 clcok cycles for gpu sync (10 runs)
 
 #include <iostream>
 #include <fstream>
@@ -21,11 +28,14 @@ using namespace std;
 void printMatrix(int*, ofstream&);
 bool checkCircularResults(int*);
 bool checkLinearResults(int*);
-__global__ void calculateDistanceMatrix(int*, int);
+__global__ void calculateDistanceMatrix(int*);
 __global__ void initializeCircularGraph(int*);
 __global__ void initializeLinearGraph(int*);
-// GPU lock-free synchronization function
-__device__ void __gpu_sync(int, int*, int*);
+// GPU simple synchronization function
+__device__ void __gpu_sync(int);
+
+// the mutex variable
+__device__ int d_mutex;
 
 int main(){
   // first, make sure N is even and in range
@@ -40,7 +50,6 @@ int main(){
   // variables
   int *matrix;
   int *d_matrix;
-  int k;
   int size = N * N * sizeof(int);
   ofstream myFile;
 
@@ -63,9 +72,7 @@ int main(){
   // NOTE: CUDA does not have any way to synchronize blocks. Because we need
   // all blocks to by synced after each K step, the way to accomplish this is
   // to end the kernel whenever block synchronization is required.
-  for (k=0; k<N; k++){
-    calculateDistanceMatrix<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix, k);
-  }
+  calculateDistanceMatrix<<<BLOCK_SIZE,THREAD_COUNT>>>(d_matrix);
 
   myFile << "                          ADJACENCY MATRIX" << endl;
   myFile << "==============================================================================" << endl;
@@ -84,6 +91,8 @@ int main(){
   free(matrix);
   cudaFree(d_matrix);
   myFile.close();
+
+  cout << "Number of clock ticks: " << clock() << endl;
 
   return 0;
 }
@@ -137,21 +146,25 @@ bool checkCircularResults(int *matrix){
   return true;
 }
 
-__global__ void calculateDistanceMatrix(int *matrix, int k){
-  int i, j, num1, num2, num3;
+__global__ void calculateDistanceMatrix(int *matrix){
+  int i, j, k, num1, num2, num3;
 
-  for (j=0; j<N; j++){
-    if ((j%BLOCK_SIZE) == blockIdx.x){
-      for (i=0; i<N; i++){
-        if ((i%THREAD_COUNT) == threadIdx.x){
-          READ_MATRIX(matrix, i, j, num1);
-          READ_MATRIX(matrix, i, k, num2);
-          READ_MATRIX(matrix, k, j, num3);
-          int minimum = min(num1, num2 + num3);
-          WRITE_MATRIX(matrix, i, j, minimum);
+  for (k=0; k<N; k++){
+    d_mutex = 0;
+    for (j=0; j<N; j++){
+      if ((j%BLOCK_SIZE) == blockIdx.x){
+        for (i=0; i<N; i++){
+          if ((i%THREAD_COUNT) == threadIdx.x){
+            READ_MATRIX(matrix, i, j, num1);
+            READ_MATRIX(matrix, i, k, num2);
+            READ_MATRIX(matrix, k, j, num3);
+            int minimum = min(num1, num2 + num3);
+            WRITE_MATRIX(matrix, i, j, minimum);
+          }
         }
       }
     }
+    __gpu_sync(BLOCK_SIZE);
   }
 
 
@@ -226,30 +239,16 @@ __global__ void initializeLinearGraph(int *matrix){
   }
 }
 
-__device__ void __gpu_sync(int goalVal, int *Arrayin, int *Arrayout){
-  // thread ID in a block
-  int tid_in_block = threadIdx.x * blockDim.y + threadIdx.y;
-  int nBlockNum = gridDim.x * gridDim.y;
-  int bid = blockIdx.x * gridDim.y + blockIdx.y;
+__device__ void __gpu_sync(int goalVal){
+  // thread ID in block
+  int tid_in_block = threadIdx.x + blockDim.y + threadIdx.y;
 
   // only thread 0 is used for synchronization
   if (tid_in_block == 0){
-    Arrayin[bid] = goalVal;
-  }
+    atomicAdd(&d_mutex, 1);
 
-  if (bid == 1){
-    if (tid_in_block < nBlockNum){
-      while (Arrayin[tid_in_block] != goalVal){
-        // ...
-      }
-    }
-    __syncthreads();
-    if (tid_in_block < nBlockNum){
-      Arrayout[tid_in_block] = goalVal;
-    }
-  }
-  if (tid_in_block == 0){
-    while (Arrayout[bid] != goalVal){
+    // only when all blocks add 1 to d_mutex will d_mutex equal goalVal
+    while(d_mutex != goalVal){
       // ...
     }
   }
