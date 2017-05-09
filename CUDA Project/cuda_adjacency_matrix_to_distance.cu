@@ -14,7 +14,7 @@
 
 using namespace std;
 
-#define N 128
+#define N 64
 #define BLOCK_SIZE 8
 #define THREAD_COUNT 32
 #define FILE_NAME "output.txt"
@@ -35,7 +35,7 @@ __global__ void initializeLinearGraph(int*);
 __device__ void __gpu_sync(int);
 
 // the mutex variable
-__device__ int d_mutex;
+__device__ int d_mutex = 0;
 
 int main(){
   // first, make sure N is even and in range
@@ -148,9 +148,9 @@ bool checkCircularResults(int *matrix){
 
 __global__ void calculateDistanceMatrix(int *matrix){
   int i, j, k, num1, num2, num3;
+  int currentGoalVal = 0;
 
   for (k=0; k<N; k++){
-    d_mutex = 0;
     for (j=0; j<N; j++){
       if ((j%BLOCK_SIZE) == blockIdx.x){
         for (i=0; i<N; i++){
@@ -164,7 +164,8 @@ __global__ void calculateDistanceMatrix(int *matrix){
         }
       }
     }
-    __gpu_sync(BLOCK_SIZE);
+    currentGoalVal += BLOCK_SIZE;
+    __gpu_sync(currentGoalVal);
   }
 
 
@@ -240,17 +241,19 @@ __global__ void initializeLinearGraph(int *matrix){
 }
 
 __device__ void __gpu_sync(int goalVal){
-  // thread ID in block
-  int tid_in_block = threadIdx.x + blockDim.y + threadIdx.y;
-
   // only thread 0 is used for synchronization
-  if (tid_in_block == 0){
+  if (threadIdx.x == 0){
     atomicAdd(&d_mutex, 1);
 
-    // only when all blocks add 1 to d_mutex will d_mutex equal goalVal
-    while(d_mutex != goalVal){
+    printf("Block %d looking for %d\n", blockIdx.x, goalVal);
+
+    // < ensures that no block will get stuck in loop if another block executes
+    // __gpu_sync before it has a chance to check the value
+    while(d_mutex < goalVal){
       // ...
     }
+
+    printf("Block %d is no longer stuck in loop\n", blockIdx.x);
   }
   __syncthreads();
 }
