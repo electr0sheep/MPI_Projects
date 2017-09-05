@@ -5,7 +5,7 @@
 ### To run
 `mpirun -np NUMBER_OF_PROCESSES_DESIRED INPUT_FILENAME`
 
-# Cuda
+# CUDA
 ## Download CUDA toolkit
 [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads)
 ### To compile
